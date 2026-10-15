@@ -9,7 +9,8 @@ DIR is the nextcloud-client recipe inside the Craft root, e.g.
 Why: the recipe at the pinned commit hard-codes the stock names. Its blacklist.txt keeps only
 bin/(nextcloud|nextcloudcmd|QtWebEngineProcess).exe and strips every other .exe from the package, which
 would drop the branded executable; createPackage() names the package "nextcloud" / "Nextcloud GmbH".
-This script rewrites exactly those three things and nothing else.
+It also adds the missing "import os" that createPackage() needs at the pinned Craft revision.
+This script rewrites exactly those things and nothing else.
 
 Safe to run twice: an already-patched recipe is left alone. If an expected line is neither in its stock
 form nor already patched, upstream changed the recipe: the script exits 1 without writing anything, so
@@ -32,6 +33,10 @@ def edits(exe: str, vendor: str) -> dict[str, list[tuple[str, str]]]:
     return {
         "blacklist.txt": [(STOCK_BLACKLIST, blacklist_new)],
         "nextcloud-client.py": [
+            # createPackage() calls os.path.join but the recipe never imports os; it relied on Craft's
+            # "from Package.CMakePackageBase import *" re-exporting it, which the pinned Craft no longer does
+            # (CI run 38696066283: NameError in createPackage). Upstream's CI never packages, so it never hit it.
+            ("import info\n", "import info\nimport os  # added by patch-blueprint.py\n"),
             ('self.defines["appname"] = "nextcloud"', f'self.defines["appname"] = "{exe}"'),
             ('self.defines["company"] = "Nextcloud GmbH"', f'self.defines["company"] = "{vendor_py}"'),
             ('self.applicationExecutable = "nextcloud"', f'self.applicationExecutable = "{exe}"'),
