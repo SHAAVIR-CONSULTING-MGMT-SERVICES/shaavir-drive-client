@@ -37,6 +37,10 @@ while (($#)); do
 done
 [[ -n "$SRC" ]] || { usage >&2; exit 2; }
 [[ -d "$SRC" ]] || die "--src is not a directory: $SRC"
+[[ -d "$OEM" ]] || die "--oem is not a directory: $OEM"
+# Absolute paths: later steps run git -C "$SRC", so a relative --oem would resolve against the wrong directory.
+SRC="$(cd "$SRC" && pwd)"
+OEM="$(cd "$OEM" && pwd)"
 [[ -f "$OEM/oem.json" && -f "$OEM/OEM.cmake" ]] || die "$OEM has no oem.json / OEM.cmake (run gen-oem.py, then export)"
 
 PY=""
