@@ -1,0 +1,49 @@
+Reason: with APPLICATION_SERVER_URL_ENFORCE ON, a saved --overrideserverurl or a command-line account setup
+(--serverurl/--userid/--apppassword) must not connect the client to any server other than the compiled-in URL.
+Against nextcloud/desktop v34.0.5 (62ebad6043b1e7c8e319f41be25d41f5a2c733e5). No effect when enforcement is off.
+diff --git a/src/gui/accountsetupfromcommandlinejob.cpp b/src/gui/accountsetupfromcommandlinejob.cpp
+index 0ad3217..6ac45d3 100644
+--- a/src/gui/accountsetupfromcommandlinejob.cpp
++++ b/src/gui/accountsetupfromcommandlinejob.cpp
+@@ -4,6 +4,7 @@
+  */
+ 
+ #include "accountsetupfromcommandlinejob.h"
++#include "config.h"
+ 
+ #include "accountmanager.h"
+ #include "accountstate.h"
+@@ -92,6 +93,15 @@ QString AccountSetupFromCommandLineJob::defaultLocalDirPath() const
+ 
+ bool AccountSetupFromCommandLineJob::handleAccountSetupFromCommandLine()
+ {
++#if defined(APPLICATION_SERVER_URL_ENFORCE) && defined(APPLICATION_SERVER_URL)
++    // Branded build with an enforced server: --serverurl may only name that server.
++    const auto enforcedServerUrl = QUrl(QString::fromUtf8(APPLICATION_SERVER_URL)).adjusted(QUrl::StripTrailingSlash);
++    if (_serverUrl.adjusted(QUrl::StripTrailingSlash) != enforcedServerUrl) {
++        printAccountSetupFromCommandLineStatusAndExit(
++            QStringLiteral("This client only connects to %1.").arg(enforcedServerUrl.toString()), true);
++        return false;
++    }
++#endif
+     if (AccountManager::instance()->accountFromUserId(QStringLiteral("%1@%2").arg(_userId, _serverUrl.host()))) {
+         printAccountSetupFromCommandLineStatusAndExit(QStringLiteral("Account %1 already exists!").arg(QDir::toNativeSeparators(_userId)), true);
+         return false;
+diff --git a/src/libsync/configfile.cpp b/src/libsync/configfile.cpp
+index 5b0e843..d186fda 100644
+--- a/src/libsync/configfile.cpp
++++ b/src/libsync/configfile.cpp
+@@ -815,8 +815,13 @@ void ConfigFile::setUpdateChannel(const QString &channel)
+ 
+ [[nodiscard]] QString ConfigFile::overrideServerUrl() const
+ {
++#if defined(APPLICATION_SERVER_URL_ENFORCE) && defined(APPLICATION_SERVER_URL)
++    // Branded build with an enforced server: a saved --overrideserverurl never replaces it.
++    return {};
++#else
+     QSettings settings(configFile(), QSettings::IniFormat);
+     return settings.value(QLatin1String(overrideServerUrlC), {}).toString();
++#endif
+ }
+ 
+ void ConfigFile::setOverrideServerUrl(const QString &url)

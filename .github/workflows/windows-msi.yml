@@ -1,0 +1,322 @@
+# .github/workflows/windows-msi.yml - build the UNSIGNED Windows MSI from the pinned upstream tag plus this
+# repository's OEM theme, and publish it with SHA256SUMS as workflow artifacts (doc 05 §4.5).
+#
+# STATUS: DRAFT. Every upstream step below mirrors upstream's own .github/workflows/windows-build-and-test.yml
+# at the pinned tag (Craft setup, blueprint repositories, Inkscape, compile) and upstream's admin/win/msi
+# (BUILD_WIN_MSI, make-msi.bat, WiX 3). The full chain (Craft portable package -> make-msi.bat) has not
+# been run yet; the first run is a HUMAN-TODO and its log must be kept (90 days) as build evidence.
+#
+# Inputs come only from oem.json (written by the private generator); nothing here is product-specific, so
+# the same file builds any tenant's theme. No secrets are used and nothing is signed here: signing runs in
+# the private build repo (D-083; doc 05 §3/§4.6), which re-packs this run's app-files.zip after signing.
+#
+# Supply chain (doc 05 §4.5): every action is pinned to a full commit SHA; the upstream tag must resolve
+# to the commit recorded in oem.json; the Craft revision comes from upstream's craftmaster.ini at that
+# tag; both blueprint repositories are pinned to commits recorded in oem.json.
+name: windows-msi
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "client-v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-msi-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build unsigned MSI
+    runs-on: windows-2022          # image has Visual Studio 2022, WiX Toolset 3.14.1, Python 3.12
+    timeout-minutes: 360           # GitHub-hosted maximum; see README "fallback" if the first build needs more
+    env:
+      CRAFT_MASTER_LOCATION: ${{ github.workspace }}\CraftMaster
+      CRAFT_MASTER_CONFIG: ${{ github.workspace }}\craftmaster.ini
+    steps:
+      - name: Check out this repository (OEM theme)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: oem
+          persist-credentials: false
+
+      - name: Read pinned values from oem.json
+        id: oem
+        shell: bash
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          d = json.load(open("oem/oem.json", encoding="utf-8"))
+          u = d["upstream"]
+          out = {
+              "upstream_repo": u["desktop"]["repo"].removeprefix("https://github.com/").removesuffix(".git"),
+              "upstream_tag": u["desktop"]["tag"],
+              "upstream_commit": u["desktop"]["commit"],
+              "craft_target": u["craft"]["target"],
+              "craft_revision": u["craft"]["craft_revision"],
+              "bp_nc_repo": u["blueprints"]["nextcloud_repo"],
+              "bp_nc_branch": u["blueprints"]["nextcloud_branch"],
+              "bp_nc_commit": u["blueprints"]["nextcloud_commit"],
+              "bp_kde_repo": u["blueprints"]["kde_repo"],
+              "bp_kde_branch": u["blueprints"]["kde_branch"],
+              "bp_kde_commit": u["blueprints"]["kde_commit"],
+              "executable": d["executable"],
+              "shortname": d["shortname"],
+              "build_number": d["build_number"],
+              "version": d["version"],
+              "release_tag": d["release_tag"],
+              "msi_name": d["msi_name"],
+              "placeholder": str(d["placeholder_assets"]).lower(),
+          }
+          out["craft_cache_key"] = "craft-v1-{}-py312-{}-{}-{}".format(
+              out["craft_target"], out["craft_revision"], out["bp_kde_commit"], out["bp_nc_commit"])
+          for k, v in out.items():
+              print(f"{k}={v}")
+          PY
+
+      - name: Refuse a tag that does not match oem.json
+        if: github.ref_type == 'tag'
+        shell: bash
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ steps.oem.outputs.release_tag }}
+        run: |
+          if [[ "$REF_NAME" != "$RELEASE_TAG" ]]; then
+            echo "::error::tag $REF_NAME but oem.json says $RELEASE_TAG; regenerate and re-export the theme"
+            exit 1
+          fi
+
+      - name: Name the artifact (release only for a release tag)
+        id: art
+        shell: bash
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          SHA: ${{ github.sha }}
+          RELEASE_TAG: ${{ steps.oem.outputs.release_tag }}
+        run: |
+          # A manual run from a branch is a development build: its artifact can never be mistaken for a release.
+          if [[ "$REF_TYPE" == tag ]]; then
+            echo "name=${RELEASE_TAG}-unsigned" >> "$GITHUB_OUTPUT"; echo "dev=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${RELEASE_TAG}-dev-${SHA:0:7}-unsigned" >> "$GITHUB_OUTPUT"; echo "dev=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::not a release tag: building a development artifact"
+          fi
+
+      - name: Check out the upstream client at the pinned tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ steps.oem.outputs.upstream_repo }}
+          ref: ${{ steps.oem.outputs.upstream_tag }}
+          path: desktop
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Refuse a moved upstream tag
+        shell: bash
+        env:
+          WANT: ${{ steps.oem.outputs.upstream_commit }}
+          CRAFT_REVISION: ${{ steps.oem.outputs.craft_revision }}
+        run: |
+          got="$(git -C desktop rev-parse HEAD)"
+          if [[ "$got" != "$WANT" ]]; then
+            echo "::error::upstream tag now points to $got, oem.json pins $WANT"
+            exit 1
+          fi
+          # Upstream's Craft settings at this tag; copied so the Craft root sits beside the sources exactly
+          # like upstream's CI (config in the workspace root).
+          cp desktop/craftmaster.ini craftmaster.ini
+          grep -q "CraftRevision = $CRAFT_REVISION" craftmaster.ini \
+            || { echo "::error::craftmaster.ini CraftRevision differs from oem.json"; exit 1; }
+
+      - name: Check branding (theme as committed)
+        shell: bash
+        run: bash oem/scripts/check-branding.sh --oem oem
+
+      - name: Apply the OEM theme to the upstream checkout
+        shell: bash
+        run: |
+          bash oem/scripts/apply-oem.sh --oem oem --src desktop
+          bash oem/scripts/check-branding.sh --oem oem --src desktop
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Restore Craft dependencies
+        id: craft-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ env.CRAFT_MASTER_LOCATION }}
+            ${{ github.workspace }}\craft-clone
+            ${{ github.workspace }}\${{ steps.oem.outputs.craft_target }}
+          key: ${{ steps.oem.outputs.craft_cache_key }}
+
+      - name: Install Craft Master and the client dependencies
+        if: steps.craft-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        env:
+          CRAFT_TARGET: ${{ steps.oem.outputs.craft_target }}
+          BP_KDE: ${{ steps.oem.outputs.bp_kde_repo }}|${{ steps.oem.outputs.bp_kde_branch }}|${{ steps.oem.outputs.bp_kde_commit }}
+          BP_NC: ${{ steps.oem.outputs.bp_nc_repo }}|${{ steps.oem.outputs.bp_nc_branch }}|${{ steps.oem.outputs.bp_nc_commit }}
+        run: |
+          & cmd /C "git clone -q --depth=1 https://invent.kde.org/packaging/craftmaster.git $env:CRAFT_MASTER_LOCATION 2>&1"
+          function craft() {
+              python "$env:CRAFT_MASTER_LOCATION\CraftMaster.py" --config "$env:CRAFT_MASTER_CONFIG" --target $env:CRAFT_TARGET -c $args
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          craft --add-blueprint-repository "$env:BP_KDE"
+          craft --add-blueprint-repository "$env:BP_NC"
+          craft craft
+          craft --install-deps nextcloud-client
+
+      - name: Save Craft dependencies
+        if: steps.craft-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ env.CRAFT_MASTER_LOCATION }}
+            ${{ github.workspace }}\craft-clone
+            ${{ github.workspace }}\${{ steps.oem.outputs.craft_target }}
+          key: ${{ steps.oem.outputs.craft_cache_key }}
+
+      - name: Verify blueprint commits and patch the client recipe
+        shell: bash
+        env:
+          ROOT: ${{ steps.oem.outputs.craft_target }}
+          NC_COMMIT: ${{ steps.oem.outputs.bp_nc_commit }}
+          KDE_COMMIT: ${{ steps.oem.outputs.bp_kde_commit }}
+        run: |
+          loc="$ROOT/etc/blueprints/locations"
+          for pair in "craft-blueprints-nextcloud:$NC_COMMIT" "craft-blueprints-kde:$KDE_COMMIT"; do
+            repo="${pair%%:*}"; want="${pair#*:}"
+            got="$(git -C "$loc/$repo" rev-parse HEAD)"
+            if [[ "$got" != "$want" ]]; then echo "::error::$repo is at $got, oem.json pins $want"; exit 1; fi
+          done
+          python oem/scripts/patch-blueprint.py --oem oem --blueprint-dir "$loc/craft-blueprints-nextcloud/nextcloud-client"
+
+      - name: Install Inkscape (upstream renders the icon PNGs with it)
+        shell: pwsh
+        run: choco install inkscape --no-progress -y
+
+      - name: Add the Craft bin directory to PATH
+        shell: pwsh
+        run: echo "${{ github.workspace }}\${{ steps.oem.outputs.craft_target }}\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Compile
+        shell: pwsh
+        env:
+          CRAFT_TARGET: ${{ steps.oem.outputs.craft_target }}
+          BUILD_NUMBER: ${{ steps.oem.outputs.build_number }}
+        run: |
+          function craft() {
+              python "$env:CRAFT_MASTER_LOCATION\CraftMaster.py" --config "$env:CRAFT_MASTER_CONFIG" --target $env:CRAFT_TARGET -c $args
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          craft --options "nextcloud-client.buildTests=False" `
+                --options "nextcloud-client.buildWithWebEngine=False" `
+                --options "nextcloud-client.args=-DBUILD_WIN_MSI=ON -DMIRALL_VERSION_BUILD=$env:BUILD_NUMBER" `
+                --src-dir "${{ github.workspace }}\desktop" nextcloud-client
+
+      - name: Collect the application files (Craft portable package)
+        id: collect
+        shell: pwsh
+        env:
+          CRAFT_TARGET: ${{ steps.oem.outputs.craft_target }}
+          EXE: ${{ steps.oem.outputs.executable }}
+        run: |
+          function craft() {
+              python "$env:CRAFT_MASTER_LOCATION\CraftMaster.py" --config "$env:CRAFT_MASTER_CONFIG" --target $env:CRAFT_TARGET -c $args
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          craft --options "[Packager]PackageType=PortablePackager" --src-dir "${{ github.workspace }}\desktop" --package nextcloud-client
+          $archive = "${{ github.workspace }}\$env:CRAFT_TARGET\build\nextcloud-client\archive"
+          $exe = Get-ChildItem -Path $archive -Recurse -Filter "$env:EXE.exe" | Select-Object -First 1
+          if (-not $exe) { Write-Error "$env:EXE.exe not found under $archive (blueprint blacklist not patched?)"; exit 1 }
+          $msiDir = "${{ github.workspace }}\$env:CRAFT_TARGET\msi"
+          if (-not (Test-Path "$msiDir\make-msi.bat")) { Write-Error "make-msi.bat not found in $msiDir (BUILD_WIN_MSI off?)"; exit 1 }
+          "harvest_dir=$($exe.DirectoryName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "msi_dir=$msiDir" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      # No signing in this public workflow (D-083, doc 05 §3/§4.6): the private repo's sign-release.yml
+      # downloads this run's artifact (app-files.zip + msi-sources.zip, checked against SHA256SUMS), signs the
+      # binaries, rebuilds the MSI with the same make-msi.bat and signs it. No credentials ever reach this repo.
+
+      - name: Build the MSI (upstream make-msi.bat, WiX 3)
+        shell: cmd
+        env:
+          HARVEST_DIR: ${{ steps.collect.outputs.harvest_dir }}
+          MSI_DIR: ${{ steps.collect.outputs.msi_dir }}
+        run: |
+          set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+          for /f "usebackq tokens=*" %%i in (`"%VSWHERE%" -latest -property installationPath`) do set "VSPATH=%%i"
+          call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
+          if not defined WIX set "WIX=%ProgramFiles(x86)%\WiX Toolset v3.14\"
+          if not exist "%WIX%bin\candle.exe" (echo WiX Toolset 3 not found & exit /b 1)
+          cd /d "%MSI_DIR%" || exit /b 1
+          call make-msi.bat "%HARVEST_DIR%" || exit /b 1
+
+      - name: Stage the installer under its release name
+        shell: bash
+        env:
+          MSI_DIR: ${{ steps.collect.outputs.msi_dir }}
+          SHORTNAME: ${{ steps.oem.outputs.shortname }}
+          MSI_NAME: ${{ steps.oem.outputs.msi_name }}
+        run: |
+          shopt -s nullglob
+          built=("$(cygpath -u "$MSI_DIR")/$SHORTNAME"-*.msi)
+          if (( ${#built[@]} != 1 )); then echo "::error::expected one $SHORTNAME-*.msi, found ${#built[@]}"; exit 1; fi
+          mkdir -p dist
+          cp "${built[0]}" "dist/$MSI_NAME"
+
+      - name: Pack the application files and MSI sources for the private signing workflow
+        shell: pwsh
+        env:
+          HARVEST_DIR: ${{ steps.collect.outputs.harvest_dir }}
+          MSI_DIR: ${{ steps.collect.outputs.msi_dir }}
+        run: |
+          Compress-Archive -Path "$env:HARVEST_DIR\*" -DestinationPath dist\app-files.zip -CompressionLevel Optimal
+          $src = Get-ChildItem -Path $env:MSI_DIR -File | Where-Object { $_.Extension -notin '.msi', '.wixobj', '.wixpdb', '.mst' }
+          Compress-Archive -Path $src.FullName -DestinationPath dist\msi-sources.zip -CompressionLevel Optimal
+
+      - name: Render the icon preview (tray check at 16 px, doc 05 §4.4)
+        shell: bash
+        run: bash oem/scripts/gen-icons.sh --oem oem --out dist/icon-preview
+
+      - name: Write SHA256SUMS and the build record
+        shell: bash
+        env:
+          UPSTREAM_TAG: ${{ steps.oem.outputs.upstream_tag }}
+          UPSTREAM_COMMIT: ${{ steps.oem.outputs.upstream_commit }}
+          CRAFT_REVISION: ${{ steps.oem.outputs.craft_revision }}
+          BP_NC: ${{ steps.oem.outputs.bp_nc_commit }}
+          BP_KDE: ${{ steps.oem.outputs.bp_kde_commit }}
+          VERSION: ${{ steps.oem.outputs.version }}
+          PLACEHOLDER: ${{ steps.oem.outputs.placeholder }}
+          DEV_BUILD: ${{ steps.art.outputs.dev }}
+          OEM_COMMIT: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          cd dist
+          sha256sum -- *.msi *.zip > SHA256SUMS
+          cat SHA256SUMS
+          python - <<'PY'
+          import json, os
+          rec = {k.lower(): os.environ[k] for k in ("UPSTREAM_TAG", "UPSTREAM_COMMIT", "CRAFT_REVISION", "BP_NC",
+                                                    "BP_KDE", "VERSION", "PLACEHOLDER", "DEV_BUILD", "OEM_COMMIT",
+                                                    "RUN_URL")}
+          rec["runner_image"] = os.environ.get("ImageOS", "") + " " + os.environ.get("ImageVersion", "")
+          rec["signed"] = False
+          json.dump(rec, open("build-info.json", "w", encoding="utf-8"), indent=2, sort_keys=True)
+          PY
+
+      - name: Upload the unsigned MSI, SHA256SUMS and build record
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.art.outputs.name }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 90

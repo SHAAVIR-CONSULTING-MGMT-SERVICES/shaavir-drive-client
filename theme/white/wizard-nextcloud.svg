@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" width="300" height="300" role="img" aria-label="Shaavir Drive">
+  <title>Shaavir Drive</title>
+  <rect x="102" y="40" width="96" height="96" rx="20" fill="#FFFFFF"/>
+  <text x="150" y="108" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="46" font-weight="700" fill="#1F3A5F">SD</text>
+  <text x="150" y="196" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="44.0" font-weight="700" fill="#FFFFFF">Shaavir</text><text x="150" y="247" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="44.0" font-weight="700" fill="#FFFFFF">Drive</text>
+</svg>

@@ -1,0 +1,18 @@
+# Build output and local tooling. This repository holds branding and build files only.
+/desktop/
+/CraftMaster/
+/windows-msvc2022_64-cl/
+/craft-clone/
+/dist/
+*.msi
+*.exe
+*.dll
+*.7z
+*.zip
+# Never in this repository: secrets, signing material, environment files.
+*.env
+.env*
+*.pfx
+*.p12
+*.pem
+*.key

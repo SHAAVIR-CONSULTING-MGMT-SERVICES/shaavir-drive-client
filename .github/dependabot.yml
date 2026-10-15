@@ -1,0 +1,8 @@
+# Keep the pinned GitHub Actions current (doc 05 §4.5: Dependabot on). Updates arrive as pull requests that
+# change the commit SHA and the version comment together; review the action's release notes before merging.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

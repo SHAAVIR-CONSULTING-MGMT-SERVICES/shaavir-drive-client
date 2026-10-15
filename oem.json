@@ -1,0 +1,97 @@
+{
+  "app_domain": "shaavir.com",
+  "build_number": 1,
+  "domain": "drive.shaavir.com",
+  "download_url": "https://www.shaavir.com/drive/download",
+  "executable": "shaavirdrive",
+  "files": {
+    "OEM.cmake": "19e11b9de21837656a08bf9d35ee843211b59714e427932b6168c3d9b237ac66",
+    "README.md": "d6ad9d138688bb0bea1bc5ca9c5fcd3c8febbeaf7b8687a62d561e6738c4a914",
+    "defaults/ShaavirDrive-defaults.reg": "c393cf23ad0f47ae7a44960109860ada1038f25f639cff66493788886df6be80",
+    "defaults/ShaavirDrive-policies.reg": "941b6d6288f1ce02169a8f8d2783f810e17cc06a92f29eb5bd5cedc6e7977b7b",
+    "installer/windows/banner.bmp": "fade9f909934bb7b09521827429a723bee17abc8e13e849064fa4a6479b1669d",
+    "installer/windows/dialog.bmp": "fdf8bcc8cd7fd398e7bbc5919af89169679954e5e0cf67fc7343799c93da27d7",
+    "theme/black/wizard-nextcloud.png": "f420796e255a5e3b76b742106a10ac1e1aeccc0ae08b242ba7c83dde6b1ffebc",
+    "theme/black/wizard-nextcloud.svg": "e7d3c204f9d74d8a1a60ca519f1a7ca578b430ba703193b6fdf5db3d5ba0ebb4",
+    "theme/black/wizard-nextcloud@2x.png": "cf4b81e59a9e7d9ae0e1c3eeb88adc59543ca0815a53a3f4670815bd3aa1bb9f",
+    "theme/colored/shaavirdrive-icon.svg": "8092253bfb89a1a80a9a4027b0a2284bb829e3d1c9e4a9742bc17b717b42186a",
+    "theme/colored/shaavirdrive-w10startmenu.svg": "8092253bfb89a1a80a9a4027b0a2284bb829e3d1c9e4a9742bc17b717b42186a",
+    "theme/colored/wizard-nextcloud.png": "f420796e255a5e3b76b742106a10ac1e1aeccc0ae08b242ba7c83dde6b1ffebc",
+    "theme/colored/wizard-nextcloud.svg": "e7d3c204f9d74d8a1a60ca519f1a7ca578b430ba703193b6fdf5db3d5ba0ebb4",
+    "theme/colored/wizard-nextcloud@2x.png": "cf4b81e59a9e7d9ae0e1c3eeb88adc59543ca0815a53a3f4670815bd3aa1bb9f",
+    "theme/colored/wizard_logo.png": "f03fcba929bf25134e5d19f077be697fc1340b1e14b7ae28b6d2bab58c17336c",
+    "theme/colored/wizard_logo.svg": "8092253bfb89a1a80a9a4027b0a2284bb829e3d1c9e4a9742bc17b717b42186a",
+    "theme/colored/wizard_logo@2x.png": "96096be3551e43a73f96d1a27f01db93eb0c1ab0d0e10bd030d833c3c9e392a2",
+    "theme/shaavirdrive.VisualElementsManifest.xml": "568ce57c878df312c8062de6447ca32a8c143e835ad47d02f1b0151b9097bf06",
+    "theme/white/wizard-nextcloud.png": "f420796e255a5e3b76b742106a10ac1e1aeccc0ae08b242ba7c83dde6b1ffebc",
+    "theme/white/wizard-nextcloud.svg": "e7d3c204f9d74d8a1a60ca519f1a7ca578b430ba703193b6fdf5db3d5ba0ebb4",
+    "theme/white/wizard-nextcloud@2x.png": "cf4b81e59a9e7d9ae0e1c3eeb88adc59543ca0815a53a3f4670815bd3aa1bb9f"
+  },
+  "guids": {
+    "GUID_CONTEXT_MENU": "155B4D3A-80D7-5F21-A5E5-CFB4D2E4AAD6",
+    "GUID_MSI_UPGRADE_CODE": "26A22FB5-0B28-5FC9-93C1-9BB452D681BE",
+    "GUID_OVERLAY_ERROR": "043F634C-664C-54B3-B6AF-6DB513565FB0",
+    "GUID_OVERLAY_OK": "87CE530E-F5D3-5326-B473-D880A116C50F",
+    "GUID_OVERLAY_OK_SHARED": "D6CD4619-5853-5D62-AE37-AC2580B90DC6",
+    "GUID_OVERLAY_SYNC": "72EE5254-BE07-523F-BF4D-8BF461F7ACE1",
+    "GUID_OVERLAY_WARNING": "6133FA99-6852-5BC1-A10C-AC123E707263"
+  },
+  "help_url": "https://drive.shaavir.com/apps/files/?dir=/Help",
+  "msi_name": "ShaavirDrive-34.0.5.1-x64.msi",
+  "placeholder_assets": true,
+  "primary_color": "#1F3A5F",
+  "product_name": "Shaavir Drive",
+  "profile": "tenant",
+  "registry": {
+    "defaults_key": "HKEY_LOCAL_MACHINE\\SOFTWARE\\Shaavir\\Shaavir Drive",
+    "policies_key": "HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Shaavir\\Shaavir Drive"
+  },
+  "release_tag": "client-v34.0.5-1",
+  "rev_domain": "com.shaavir.drive",
+  "rev_domain_dbus": "drive.shaavir.com",
+  "server_url": "https://drive.shaavir.com",
+  "server_url_enforced": true,
+  "shortname": "ShaavirDrive",
+  "sign_patterns": [
+    "shaavirdrive.exe",
+    "shaavirdrivecmd.exe",
+    "shaavirdrive_*.dll",
+    "*sync.dll",
+    "*csync.dll",
+    "NCContextMenu.dll",
+    "NCOverlays.dll",
+    "NCMsiHelper*.dll",
+    "CfApiShellExtensions.dll"
+  ],
+  "source_url": "https://github.com/SHAAVIR-CONSULTING-MGMT-SERVICES/shaavir-drive-client",
+  "support_email": "support@shaavir.com",
+  "tenant_id": "shaavir",
+  "update_url": "https://updates.shaavir.com/client/",
+  "updates_host": "updates.shaavir.com",
+  "upstream": {
+    "blueprints": {
+      "kde_branch": "stable-34.0",
+      "kde_commit": "f741913be9544ee325beced18c8f357fc3f439bc",
+      "kde_repo": "https://github.com/nextcloud/craft-blueprints-kde.git",
+      "nextcloud_branch": "stable-34.0",
+      "nextcloud_commit": "be49d8769cc45f704aa0813bb01b4ef138444485",
+      "nextcloud_repo": "https://github.com/nextcloud/craft-blueprints-nextcloud.git"
+    },
+    "craft": {
+      "craft_branch": "stable-34.0-qt-6.10.2",
+      "craft_repo": "https://github.com/nextcloud/craft.git",
+      "craft_revision": "2661a4e055f1e077548adf3ba050a4699837e574",
+      "craftmaster_repo": "https://invent.kde.org/packaging/craftmaster.git",
+      "target": "windows-msvc2022_64-cl"
+    },
+    "desktop": {
+      "commit": "62ebad6043b1e7c8e319f41be25d41f5a2c733e5",
+      "license_sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643",
+      "repo": "https://github.com/nextcloud/desktop.git",
+      "tag": "v34.0.5",
+      "version": "34.0.5"
+    }
+  },
+  "vendor": "Shaavir",
+  "version": "34.0.5.1"
+}
