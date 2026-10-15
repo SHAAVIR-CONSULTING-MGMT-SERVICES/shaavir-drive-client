@@ -259,6 +259,14 @@ jobs:
           if (-not $exe) { Write-Error "$env:EXE.exe not found under $archive (blueprint blacklist not patched?)"; exit 1 }
           $msiDir = "${{ github.workspace }}\$env:CRAFT_TARGET\msi"
           if (-not (Test-Path "$msiDir\make-msi.bat")) { Write-Error "make-msi.bat not found in $msiDir (BUILD_WIN_MSI off?)"; exit 1 }
+          # Nextcloud.wxs takes the app icon from the harvest dir ($(var.HarvestAppDir)\<AppIcon>), but CMake
+          # only generates it in the build tree (src/gui, for the .rc) and never installs it on Windows, so the
+          # portable package lacks it (CI run 38701680621: light LGHT0103). Copy the generated one beside the exe.
+          $wxi = Get-Content -Raw "$msiDir\OEM.wxi"
+          if ($wxi -notmatch '<\?define AppIcon = "([^"]+)" \?>') { Write-Error "AppIcon not defined in $msiDir\OEM.wxi"; exit 1 }
+          $ico = "${{ github.workspace }}\$env:CRAFT_TARGET\build\nextcloud-client\work\build\src\gui\$($Matches[1])"
+          if (-not (Test-Path $ico)) { Write-Error "$ico not found (the build generates it from theme/colored/<icon>-icon.svg)"; exit 1 }
+          Copy-Item $ico $exe.DirectoryName
           "harvest_dir=$($exe.DirectoryName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "msi_dir=$msiDir" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
