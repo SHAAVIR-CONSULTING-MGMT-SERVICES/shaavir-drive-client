@@ -2,7 +2,7 @@
   "app_domain": "shaavir.com",
   "bootstrapper": {
     "exe_name": "ShaavirDriveSetup.exe",
-    "manifest_pubkey": "",
+    "manifest_pubkey": "RWQcb7UKJE2OPV9FoxHTdmlcqi9Yh42o0hB3ALEzknt9hDjogqlciJ9Y",
     "min_windows_build": 19045
   },
   "build_number": 1,
