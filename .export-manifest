@@ -1,7 +1,7 @@
 # Files written by the private export (doc 05 section 3). sha256  path
 2536c2623b86e74017266a603d3e0d35d99f47b266981400a22e93411de57351  .gitattributes
 7ef51030d642da8b18527458efd494467afd4799fff8c5fdd94fb7228d690461  .github/dependabot.yml
-03096ed3c0d440ee8758cc4d57d14786eb3c18a90bd12aab1712730303b5def5  .github/workflows/setup-stub.yml
+95ad392be8e19dbd9db20bd2291eda271f72c98cbc2375229e364120801ffc53  .github/workflows/setup-stub.yml
 3edb1b4d3f60dfe0f9244a97567a82ce1ba45bd65565d7ad6f83f5ccc01ecbdf  .github/workflows/windows-msi.yml
 7748b30c1c39355a6af75407950f29234e40d43aa915a87ed0d6d590dbefed44  .gitignore
 8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643  LICENSE

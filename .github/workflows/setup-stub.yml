@@ -13,6 +13,9 @@ name: setup-stub
 on:
   workflow_dispatch:
   push:
+    # with only `tags`, branch pushes would never run; `paths` applies to branch pushes only
+    branches:
+      - "**"
     tags:
       - "setup-v*"
     paths:
