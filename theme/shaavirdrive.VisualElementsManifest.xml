@@ -1,6 +1,6 @@
 <Application xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>
   <VisualElements
-    BackgroundColor="#1F3A5F"
+    BackgroundColor="#083D6B"
     ForegroundText="light"
     ShowNameOnSquare150x150Logo="on"
     Square150x150Logo="visualelements\150-shaavirdrive-w10startmenu.png"

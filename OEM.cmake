@@ -38,8 +38,8 @@ set( APPLICATION_FORBID_BAD_SSL      ON )          # no "trust this certificate 
 set( APPLICATION_OCSP_STAPLING_ENABLED OFF )       # Let's Encrypt has ended OCSP
 
 # ---- wizard colours (the wizard logo is theme/colored/wizard_logo.*)
-set( NEXTCLOUD_BACKGROUND_COLOR      "#1F3A5F" )
-set( APPLICATION_WIZARD_HEADER_BACKGROUND_COLOR "#1F3A5F" )
+set( NEXTCLOUD_BACKGROUND_COLOR      "#083D6B" )
+set( APPLICATION_WIZARD_HEADER_BACKGROUND_COLOR "#083D6B" )
 set( APPLICATION_WIZARD_HEADER_TITLE_COLOR "#ffffff" )
 set( APPLICATION_WIZARD_USE_CUSTOM_LOGO ON )
 

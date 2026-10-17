@@ -1,0 +1,114 @@
+# .github/workflows/setup-stub.yml - build the small download stub (<Shortname>Setup.exe, D-160) that
+# downloads, verifies and installs the MSI. UNSIGNED here; signing (later) re-signs this exact file in
+# the private repo, like the MSI (D-083, D-164).
+#
+# Reproducibility: the toolchain is pinned in bootstrapper/rust-toolchain.toml, every crate in
+# Cargo.lock (--locked), the linker runs with /Brepro (no time stamp) and source paths are remapped.
+# The job builds TWICE in separate target folders and fails if the two .exe files differ, so every
+# published hash is a hash anyone can rebuild from this commit.
+#
+# Inputs come only from oem.json (product name, update host, manifest key, MSI upgrade code).
+name: setup-stub
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "setup-v*"
+    paths:
+      - "bootstrapper/**"
+      - "oem.json"
+      - "scripts/make-setup-icon.py"
+      - ".github/workflows/setup-stub.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: setup-stub-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and test the setup stub
+    runs-on: windows-2022
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Icon from the theme logo
+        run: |
+          python -m pip install --disable-pip-version-check --no-cache-dir "pillow==11.3.0"
+          python scripts/make-setup-icon.py
+
+      - name: Toolchain (pinned in rust-toolchain.toml)
+        working-directory: bootstrapper
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustup show
+          rustc --version
+          cargo --version
+
+      - name: Tests (portable logic, local test server)
+        working-directory: bootstrapper
+        env:
+          SDRIVE_DEV_BUILD: "1"   # the tests do not use the tenant key
+        run: cargo test --locked --target x86_64-pc-windows-msvc
+
+      - name: Build twice and compare
+        id: build
+        working-directory: bootstrapper
+        run: |
+          set -euo pipefail
+          name="$(python -c 'import json; print(json.load(open("../oem.json"))["bootstrapper"]["exe_name"])')"
+          key="$(python -c 'import json; print(json.load(open("../oem.json"))["bootstrapper"]["manifest_pubkey"])')"
+          if [[ -z "$key" ]]; then
+            echo "::warning::oem.json has no bootstrapper.manifest_pubkey: building a TEST stub that refuses to install (H-56)"
+            export SDRIVE_DEV_BUILD=1
+            name="${name%.exe}-TEST-NO-KEY.exe"
+          fi
+          ws="$(cygpath -w "$GITHUB_WORKSPACE")"
+          ch="$(cygpath -w "${CARGO_HOME:-$USERPROFILE/.cargo}")"
+          export RUSTFLAGS="-C link-arg=/Brepro --remap-path-prefix=${ws}=src --remap-path-prefix=${ch}=cargo"
+          export CARGO_INCREMENTAL=0
+          for t in a b; do
+            cargo build --release --locked --target x86_64-pc-windows-msvc --target-dir "../_t_$t"
+          done
+          a="../_t_a/x86_64-pc-windows-msvc/release/setup.exe"
+          b="../_t_b/x86_64-pc-windows-msvc/release/setup.exe"
+          ha="$(sha256sum "$a" | cut -d' ' -f1)"; hb="$(sha256sum "$b" | cut -d' ' -f1)"
+          echo "build a: $ha"; echo "build b: $hb"
+          if [[ "$ha" != "$hb" ]]; then
+            echo "::error::the two builds differ; the stub is not reproducible"; exit 1
+          fi
+          size="$(stat -c %s "$a")"
+          echo "size: $size bytes"
+          (( size < 5000000 )) || { echo "::error::stub is $size bytes (target < 5 MB)"; exit 1; }
+          mkdir -p ../out
+          cp "$a" "../out/$name"
+          (cd ../out && sha256sum "$name" > SHA256SUMS && cat SHA256SUMS)
+          {
+            echo "### Setup stub"
+            echo ""
+            echo "\`$name\` - $size bytes"
+            echo ""
+            echo "SHA-256 \`$ha\` (two builds identical)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: setup-stub-${{ github.sha }}
+          path: out/
+          retention-days: 90
+          if-no-files-found: error

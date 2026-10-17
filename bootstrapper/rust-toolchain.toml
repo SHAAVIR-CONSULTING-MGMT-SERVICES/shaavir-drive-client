@@ -1,0 +1,5 @@
+# Pinned so two builds of one commit use the same compiler (D-160).
+[toolchain]
+channel = "1.97.0"
+profile = "minimal"
+targets = ["x86_64-pc-windows-msvc"]
