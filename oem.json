@@ -6,6 +6,7 @@
     "min_windows_build": 19045
   },
   "build_number": 1,
+  "code_signing": false,
   "domain": "drive.shaavir.com",
   "download_url": "https://www.shaavir.com/drive/download",
   "executable": "shaavirdrive",

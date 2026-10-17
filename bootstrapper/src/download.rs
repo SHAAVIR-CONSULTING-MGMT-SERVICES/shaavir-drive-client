@@ -224,6 +224,38 @@ fn fetch_range(
     Ok(())
 }
 
+/// Opens the finished download read-only and denies other writers and deleters (Windows share mode
+/// FILE_SHARE_READ only) for as long as the returned File lives. The caller hashes through this handle and
+/// keeps it open until msiexec has finished, so the verified bytes are the bytes msiexec reads: nobody can
+/// replace or rename the file (or its folder) in between (D-160, audit H1).
+pub fn open_locked(path: &Path) -> std::io::Result<File> {
+    let mut o = OpenOptions::new();
+    o.read(true);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        o.share_mode(0x0000_0001); // FILE_SHARE_READ
+    }
+    o.open(path)
+}
+
+/// SHA-256 and length through an open handle, from the start.
+pub fn sha256_handle(f: &mut File) -> std::io::Result<([u8; 32], u64)> {
+    f.seek(SeekFrom::Start(0))?;
+    let mut h = Sha256::new();
+    let mut buf = vec![0u8; 1 << 16];
+    let mut n_total = 0u64;
+    loop {
+        let n = f.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        n_total += n as u64;
+        h.update(&buf[..n]);
+    }
+    Ok((h.finalize().into(), n_total))
+}
+
 /// Removes the download folder and everything in it (best effort; called on every exit path).
 pub fn cleanup(dir: &Path) {
     let _ = fs::remove_dir_all(dir);

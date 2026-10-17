@@ -88,7 +88,8 @@ jobs:
           fi
           ws="$(cygpath -w "$GITHUB_WORKSPACE")"
           ch="$(cygpath -w "${CARGO_HOME:-$USERPROFILE/.cargo}")"
-          export RUSTFLAGS="-C link-arg=/Brepro --remap-path-prefix=${ws}=src --remap-path-prefix=${ch}=cargo"
+          # same flags as bootstrapper/.cargo/config.toml (RUSTFLAGS replaces that table) + path remapping
+          export RUSTFLAGS="-C target-feature=+crt-static -C link-arg=/DEPENDENTLOADFLAG:0x800 -C link-arg=/Brepro --remap-path-prefix=${ws}=src --remap-path-prefix=${ch}=cargo"
           export CARGO_INCREMENTAL=0
           for t in a b; do
             cargo build --release --locked --target x86_64-pc-windows-msvc --target-dir "../_t_$t" 2>&1 | tee "../cargo-build-$t.log" || {
@@ -103,6 +104,16 @@ jobs:
           if [[ "$ha" != "$hb" ]]; then
             echo "::error::the two builds differ; the stub is not reproducible"; exit 1
           fi
+          # Imports: only Windows system DLLs (no C runtime DLL, nothing that could be planted next to the exe)
+          vsw="/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe"
+          dumpbin="$("$vsw" -latest -find '**/Hostx64/x64/dumpbin.exe' | head -1 | tr -d '\r')"
+          "$dumpbin" /nologo /dependents "$a" | tee ../imports.txt
+          bad="$(grep -iE '^\s+[A-Za-z0-9_.-]+\.dll' ../imports.txt | tr -d ' \r' | tr 'A-Z' 'a-z' \
+                 | grep -vE '^(kernel32|ntdll|user32|gdi32|advapi32|shell32|ole32|oleaut32|comctl32|msi|winhttp|dwmapi|uxtheme|bcrypt|bcryptprimitives|ws2_32|userenv|secur32|crypt32)\.dll$|^api-ms-win-' || true)"
+          if [[ -n "$bad" ]]; then echo "::error::unexpected DLL imports: $bad"; exit 1; fi
+          "$dumpbin" /nologo /loadconfig "$a" | grep -i "dependent" || echo "::warning::DependentLoadFlags not shown by dumpbin"
+          linkver="$("$("$vsw" -latest -find '**/Hostx64/x64/link.exe' | head -1 | tr -d '\r')" 2>&1 | head -1 | tr -d '\r')"
+          echo "linker: $linkver"
           size="$(stat -c %s "$a")"
           echo "size: $size bytes"
           (( size < 5000000 )) || { echo "::error::stub is $size bytes (target < 5 MB)"; exit 1; }
@@ -115,6 +126,8 @@ jobs:
             echo "\`$name\` - $size bytes"
             echo ""
             echo "SHA-256 \`$ha\` (two builds identical)"
+            echo ""
+            echo "Toolchain: $(rustc --version), $linkver. Reproducing this hash needs the same Rust and MSVC linker versions."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload

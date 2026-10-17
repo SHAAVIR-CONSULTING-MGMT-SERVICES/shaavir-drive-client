@@ -1,0 +1,7 @@
+# Release settings that must be the same for every build of the stub, local or CI (D-160, audit H2/M4).
+# The CI workflow sets RUSTFLAGS, which overrides this table, so it repeats these flags; keep both equal.
+#   /DEPENDENTLOADFLAG:0x800  static imports load only from System32 (no DLL planting from Downloads)
+#   +crt-static               no vcruntime140.dll import
+#   /Brepro                   no time stamp in the PE header (reproducible)
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static", "-C", "link-arg=/DEPENDENTLOADFLAG:0x800", "-C", "link-arg=/Brepro"]

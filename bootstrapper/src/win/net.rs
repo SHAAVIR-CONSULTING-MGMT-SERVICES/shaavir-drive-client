@@ -11,6 +11,8 @@ use windows_sys::Win32::Foundation::GetLastError;
 use windows_sys::Win32::Networking::WinHttp::*;
 
 const OPTION_DISABLE_FEATURE: u32 = 63;
+const OPTION_ENABLE_FEATURE: u32 = 79;
+const ENABLE_SSL_REVOCATION: u32 = 0x0000_0001;
 const DISABLE_REDIRECTS: u32 = 0x0000_0002;
 const OPTION_SECURE_PROTOCOLS: u32 = 84;
 const PROTO_TLS12: u32 = 0x0000_0800;
@@ -119,6 +121,9 @@ impl Transport for WinHttp {
             if WinHttpSetOption(req.0, OPTION_DISABLE_FEATURE, &dis as *const u32 as *const c_void, 4) == 0 {
                 return Err(err("disabling redirects"));
             }
+            // certificate revocation check, soft-fail like the browsers (audit L6)
+            let rev = ENABLE_SSL_REVOCATION;
+            WinHttpSetOption(req.0, OPTION_ENABLE_FEATURE, &rev as *const u32 as *const c_void, 4);
         }
         let mut headers = String::from("Cache-Control: no-cache\r\n");
         if from > 0 {

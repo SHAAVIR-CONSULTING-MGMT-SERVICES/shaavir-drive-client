@@ -73,7 +73,15 @@ impl Ui for SilentUi<'_> {
     }
 }
 
+const LOAD_LIBRARY_SEARCH_SYSTEM32: u32 = 0x0000_0800;
+/// ERROR_ELEVATION_REQUIRED: silent mode was started without admin rights
+const ERROR_ELEVATION_REQUIRED: u32 = 740;
+
 pub fn run() -> u32 {
+    // The stub usually runs from Downloads: never load a DLL from there. Static imports are already
+    // limited to System32 by the /DEPENDENTLOADFLAG:0x800 link flag (.cargo/config.toml); this covers
+    // every later LoadLibrary (audit H2).
+    unsafe { windows_sys::Win32::System::LibraryLoader::SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32) };
     let parsed = args::parse(std::env::args().skip(1));
     let a = match parsed {
         Ok(a) => a,
@@ -88,6 +96,12 @@ pub fn run() -> u32 {
     }
     let log = Log::new(a.log.as_deref());
     if a.silent {
+        if !sys::elevated() {
+            // a hidden UAC prompt would block forever in an unattended session (audit L4)
+            log.line(&sdrive_setup::strings::text(Msg::NeedsElevation, tenant::PRODUCT_NAME, &[]));
+            log.line(&format!("exit code {ERROR_ELEVATION_REQUIRED}"));
+            return ERROR_ELEVATION_REQUIRED;
+        }
         let cancel = AtomicBool::new(false);
         let mut p = sys::WinPlatform::new(None);
         let r = app::run(&mut p, &SilentUi(&log), &config(), true, &cancel);

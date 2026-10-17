@@ -95,7 +95,9 @@ pub fn run(p: &mut dyn Platform, ui: &dyn Ui, cfg: &Config, silent: bool, cancel
         Ok(k) => k,
         Err(e) => return stop(Msg::NoReleaseKey, vec![], false, false, format!("compiled-in key: {e:?}"), code::INTERNAL),
     };
-    let floor = Version::parse_strict(&cfg.floor).unwrap_or(Version([0, 0, 0, 0]));
+    let Some(floor) = Version::parse_strict(&cfg.floor) else {
+        return stop(Msg::NoReleaseKey, vec![], false, false, format!("compiled-in version floor {:?} is invalid", cfg.floor), code::INTERNAL);
+    };
 
     ui.status(Msg::Checking, &[]);
     let facts = p.facts();
@@ -117,6 +119,9 @@ pub fn run(p: &mut dyn Platform, ui: &dyn Ui, cfg: &Config, silent: bool, cancel
             return stop(Msg::ManifestInvalid, vec![], true, false, format!("signature: {e:?} (key {})", key.key_id_hex()), code::NOT_TRUSTED)
         }
     };
+    if !trusted.split(['\t', ' ']).any(|t| t == "file:latest.json") {
+        return stop(Msg::ManifestInvalid, vec![], true, false, format!("signature is not for latest.json ({trusted})"), code::NOT_TRUSTED);
+    }
     ui.log(&format!("manifest signature ok (key {}, {trusted})", key.key_id_hex()));
     let m = match manifest::parse(&body, &cfg.product, &cfg.host) {
         Ok(m) => m,
@@ -180,16 +185,34 @@ pub fn run(p: &mut dyn Platform, ui: &dyn Ui, cfg: &Config, silent: bool, cancel
         return net_stop(&e, &inst.file_name);
     }
     ui.status(Msg::Verifying, &[]);
+    // Lock the file (read-only, no other writers or deleters) and hash it again through that handle; the
+    // handle stays open until msiexec is done, so what was checked is what gets installed (audit H1).
+    let locked = match download::open_locked(&msi).and_then(|mut f| download::sha256_handle(&mut f).map(|h| (f, h))) {
+        Ok((f, (h, n))) if h == inst.sha256 && n == inst.size => f,
+        Ok(_) => {
+            download::cleanup(&dir);
+            return stop(Msg::DownloadCorrupt, vec![], true, false, "file changed after the check".into(), code::NOT_TRUSTED);
+        }
+        Err(e) => {
+            download::cleanup(&dir);
+            return stop(Msg::InstallFailed, vec![code::INTERNAL.to_string()], true, false, format!("locking the download: {e}"), code::INTERNAL);
+        }
+    };
     ui.log(&format!("{} verified: {} bytes, sha256 ok", inst.file_name, inst.size));
     if cancel.load(Ordering::SeqCst) {
+        drop(locked);
         download::cleanup(&dir);
         return stop(Msg::InstallCancelled, vec![], true, false, "cancelled".into(), code::CANCELLED);
     }
 
-    // 4. install (the only elevated step)
+    // 4. install (the only elevated step). The verbose log is written inside the locked work folder (its
+    // parents cannot be swapped while the MSI handle is open) and copied out afterwards (audit M3).
     ui.status(if silent { Msg::Installing } else { Msg::WaitingForPermission }, &[]);
+    let work_log = dir.join("msiexec.log");
     let log = dir.parent().unwrap_or(&dir).join(format!("{}-msiexec.log", inst.file_name.trim_end_matches(".msi")));
-    let rc = p.run_msiexec(&msi, &log, silent);
+    let rc = p.run_msiexec(&msi, &work_log, silent);
+    drop(locked);
+    let _ = std::fs::copy(&work_log, &log);
     download::cleanup(&dir);
     let rc = match rc {
         Ok(c) => c,
@@ -399,6 +422,36 @@ mod tests {
         f.msiexec = Some(1223);
         let r = go(&mut f, &cfg, false);
         assert!(matches!(r.ending, Ending::Stopped { msg: Msg::InstallCancelled, retry: true, .. }));
+    }
+
+    #[test]
+    fn signature_for_another_file_refused() {
+        let msi = b"x".repeat(100);
+        let (mut f, cfg) = setup("otherfile", &msi, None, &TestSigner::new(7));
+        let man = f.t.files[MANIFEST_PATH].clone();
+        let sig = TestSigner::new(7).sign(&man, "timestamp:1 file:other.json");
+        f.t.files.insert(SIGNATURE_PATH.to_string(), sig.into_bytes());
+        let r = go(&mut f, &cfg, false);
+        assert!(matches!(r.ending, Ending::Stopped { msg: Msg::ManifestInvalid, .. }));
+        assert!(f.ran_msi.borrow().is_empty());
+    }
+
+    #[test]
+    fn bad_floor_refuses() {
+        let msi = b"x".repeat(100);
+        let (mut f, mut cfg) = setup("floor", &msi, None, &TestSigner::new(7));
+        cfg.floor = "garbage".into();
+        let r = go(&mut f, &cfg, false);
+        assert!(matches!(r.ending, Ending::Stopped { msg: Msg::NoReleaseKey, .. }));
+    }
+
+    #[test]
+    fn msiexec_log_copied_out_and_folder_removed() {
+        let msi = b"x".repeat(100);
+        let (mut f, cfg) = setup("log", &msi, None, &TestSigner::new(7));
+        let r = go(&mut f, &cfg, false);
+        assert_eq!(r.ending, Ending::Opened);
+        assert!(!f.dir.join("work").exists());
     }
 
     #[test]

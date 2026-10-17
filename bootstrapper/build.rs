@@ -61,6 +61,11 @@ fn main() {
         assert!(oem.is_some(), "no oem.json at {} (set SDRIVE_OEM_JSON)", oem_path.display());
         assert!(!key.is_empty(), "oem.json has no bootstrapper.manifest_pubkey; set SDRIVE_DEV_BUILD=1 for a build that cannot install");
         assert!(!upgrade.is_empty(), "oem.json has no guids.GUID_MSI_UPGRADE_CODE");
+        let parts: Vec<&str> = floor.split('.').collect();
+        assert!(
+            parts.len() == 4 && parts.iter().all(|p| !p.is_empty() && p.len() <= 9 && p.bytes().all(|b| b.is_ascii_digit())),
+            "oem.json version {floor:?} is not a.b.c.d (it is the stub's rollback floor)"
+        );
     }
     assert!(
         host.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'.' || b == b'-'),

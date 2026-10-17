@@ -24,6 +24,10 @@ const SEE_MASK_NOCLOSEPROCESS: u32 = 0x0000_0040;
 const SEE_MASK_NOASYNC: u32 = 0x0000_0100;
 const SYNCHRONIZE_ACCESS: u32 = 0x0010_0000;
 
+pub fn elevated() -> bool {
+    unsafe { IsUserAnAdmin() != 0 }
+}
+
 pub fn timestamp() -> String {
     let mut t = unsafe { std::mem::zeroed() };
     unsafe { GetLocalTime(&mut t) };
@@ -270,6 +274,11 @@ impl Platform for WinPlatform {
     }
 
     fn launch_app(&mut self) -> Result<(), String> {
+        // Never start the sync client elevated (someone used "Run as administrator"): it would run, sync
+        // and update as admin. The person opens it from the Start menu instead (audit M1).
+        if unsafe { IsUserAnAdmin() } != 0 {
+            return Err("setup is running elevated; not opening the app from here".into());
+        }
         let loc = if self.install_location.is_empty() {
             installed_product().map(|(_, l)| l).unwrap_or_default()
         } else {
