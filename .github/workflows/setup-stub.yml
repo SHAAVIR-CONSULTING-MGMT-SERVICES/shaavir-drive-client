@@ -106,13 +106,17 @@ jobs:
           fi
           # Imports: only Windows system DLLs (no C runtime DLL, nothing that could be planted next to the exe)
           vsw="/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe"
-          dumpbin="$("$vsw" -latest -find '**/Hostx64/x64/dumpbin.exe' | head -1 | tr -d '\r')"
-          "$dumpbin" /nologo /dependents "$a" | tee ../imports.txt
+          # Git Bash would turn "/nologo" into a path: use the dash forms and switch path conversion off
+          export MSYS2_ARG_CONV_EXCL='*'
+          dumpbin="$("$vsw" -latest -find 'VC/Tools/MSVC/**/bin/Hostx64/x64/dumpbin.exe' | tr -d '\r' | sort -V | tail -1)"
+          "$dumpbin" -nologo -dependents "$a" | tee ../imports.txt
           bad="$(grep -iE '^\s+[A-Za-z0-9_.-]+\.dll' ../imports.txt | tr -d ' \r' | tr 'A-Z' 'a-z' \
                  | grep -vE '^(kernel32|ntdll|user32|gdi32|advapi32|shell32|ole32|oleaut32|comctl32|msi|winhttp|dwmapi|uxtheme|bcrypt|bcryptprimitives|ws2_32|userenv|secur32|crypt32)\.dll$|^api-ms-win-' || true)"
           if [[ -n "$bad" ]]; then echo "::error::unexpected DLL imports: $bad"; exit 1; fi
-          "$dumpbin" /nologo /loadconfig "$a" | grep -i "dependent" || echo "::warning::DependentLoadFlags not shown by dumpbin"
-          linkver="$("$("$vsw" -latest -find '**/Hostx64/x64/link.exe' | head -1 | tr -d '\r')" 2>&1 | head -1 | tr -d '\r')"
+          "$dumpbin" -nologo -loadconfig "$a" | grep -i "dependent" || echo "::warning::DependentLoadFlags not shown by dumpbin"
+          linkexe="$("$vsw" -latest -find 'VC/Tools/MSVC/**/bin/Hostx64/x64/link.exe' | tr -d '\r' | sort -V | tail -1)"
+          linkver="$( ("$linkexe" 2>&1 || true) | head -1 | tr -d '\r')"
+          unset MSYS2_ARG_CONV_EXCL
           echo "linker: $linkver"
           size="$(stat -c %s "$a")"
           echo "size: $size bytes"
