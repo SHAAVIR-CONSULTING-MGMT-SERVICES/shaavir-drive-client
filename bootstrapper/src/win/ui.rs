@@ -41,7 +41,7 @@ const OBJID_CLIENT: i32 = -4;
 const CF_UNICODETEXT: u32 = 13;
 const SS_NOPREFIX: u32 = 0x80;
 const SS_ENDELLIPSIS: u32 = 0x4000;
-const DWMWA_USE_IMMERSIVE_DARK_MODE: i32 = 20;
+const DWMWA_USE_IMMERSIVE_DARK_MODE: u32 = 20;
 
 // Client size in DIPs
 const W: i32 = 480;
@@ -100,10 +100,6 @@ struct State {
 
 thread_local! {
     static ST: RefCell<Option<std::rc::Rc<State>>> = const { RefCell::new(None) };
-}
-
-fn st() -> std::rc::Rc<State> {
-    ST.with(|s| s.borrow().as_ref().cloned()).expect("window state")
 }
 
 fn set_text(h: HWND, s: &str) {
@@ -417,7 +413,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
             0
         }
         WM_COMMAND => {
-            let id = (wp & 0xffff) as usize;
+            let id = wp & 0xffff;
             match id {
                 ID_PRIMARY | 1 /* IDOK: Enter */ => on_primary(&s, hwnd),
                 ID_COPY => copy_details(&s, hwnd),

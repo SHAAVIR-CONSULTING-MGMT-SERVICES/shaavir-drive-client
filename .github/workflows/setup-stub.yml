@@ -66,7 +66,13 @@ jobs:
         working-directory: bootstrapper
         env:
           SDRIVE_DEV_BUILD: "1"   # the tests do not use the tenant key
-        run: cargo test --locked --target x86_64-pc-windows-msvc
+        run: |
+          set -o pipefail
+          # failures also become annotations, readable through the API without the log archive
+          cargo test --locked --target x86_64-pc-windows-msvc 2>&1 | tee ../cargo-test.log || {
+            grep -E "^error|panicked at|^test .* FAILED|^---- " ../cargo-test.log | head -20 | sed 's/^/::error::/'
+            exit 1
+          }
 
       - name: Build twice and compare
         id: build
@@ -85,7 +91,10 @@ jobs:
           export RUSTFLAGS="-C link-arg=/Brepro --remap-path-prefix=${ws}=src --remap-path-prefix=${ch}=cargo"
           export CARGO_INCREMENTAL=0
           for t in a b; do
-            cargo build --release --locked --target x86_64-pc-windows-msvc --target-dir "../_t_$t"
+            cargo build --release --locked --target x86_64-pc-windows-msvc --target-dir "../_t_$t" 2>&1 | tee "../cargo-build-$t.log" || {
+              grep -E -A3 "^error" "../cargo-build-$t.log" | head -20 | sed 's/^/::error::/'
+              exit 1
+            }
           done
           a="../_t_a/x86_64-pc-windows-msvc/release/setup.exe"
           b="../_t_b/x86_64-pc-windows-msvc/release/setup.exe"
